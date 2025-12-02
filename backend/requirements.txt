@@ -1,0 +1,44 @@
+# ============================================================
+# Dependencias para el servidor de voz HablaConmigo
+# Universidad Veracruzana - Interfaces de Usuario Avanzadas
+# ============================================================
+
+# Framework web
+flask==3.0.0
+flask-cors==4.0.0
+
+# Reconocimiento de voz (Speech-to-Text) - VISTO EN CLASE
+SpeechRecognition==3.10.1
+
+# Síntesis de voz (Text-to-Speech) - VISTO EN CLASE  
+pyttsx3==2.90
+
+# Manejo de audio
+PyAudio==0.2.14
+
+# ============================================================
+# INSTRUCCIONES DE INSTALACIÓN:
+#
+# 1. Crear entorno virtual:
+#    python -m venv venv
+#
+# 2. Activar entorno:
+#    Windows: venv\Scripts\activate
+#    Mac/Linux: source venv/bin/activate
+#
+# 3. Instalar dependencias:
+#    pip install -r requirements.txt
+#
+# NOTA PARA PYAUDIO:
+# - Windows: Si falla, descargar .whl de:
+#   https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio
+#   pip install PyAudio-0.2.14-cp311-cp311-win_amd64.whl
+#
+# - Mac: 
+#   brew install portaudio
+#   pip install pyaudio
+#
+# - Linux:
+#   sudo apt-get install portaudio19-dev
+#   pip install pyaudio
+# ============================================================
