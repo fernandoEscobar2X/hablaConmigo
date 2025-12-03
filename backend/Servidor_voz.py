@@ -17,6 +17,7 @@ import tempfile
 import base64
 import threading
 import time
+import subprocess
 
 app = Flask(__name__)
 CORS(app)  # Permitir peticiones desde el frontend Next.js
@@ -214,7 +215,8 @@ def escuchar():
 def transcribir():
     """
     Speech-to-Text desde archivo de audio usando speech_recognition
-    Recibe: archivo de audio en base64 (WAV preferido)
+    CORREGIDO: Convierte WebM a WAV usando ffmpeg antes de transcribir
+    Recibe: archivo de audio en base64 (WebM del navegador)
     Retorna: texto reconocido
     """
     try:
@@ -228,49 +230,92 @@ def transcribir():
         
         # Decodificar audio base64
         audio_bytes = base64.b64decode(audio_base64)
+        print(f"📦 Audio recibido: {len(audio_bytes)} bytes")
         
-        # Crear archivo temporal
-        archivo_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
-        archivo_temp.write(audio_bytes)
-        archivo_temp.close()
+        # Guardar como archivo temporal WebM (formato del navegador)
+        webm_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.webm')
+        webm_temp.write(audio_bytes)
+        webm_temp.close()
+        webm_path = webm_temp.name
         
-        print(f"📁 Archivo temporal creado: {archivo_temp.name} ({len(audio_bytes)} bytes)")
+        # Ruta para el archivo WAV convertido
+        wav_path = webm_path.replace('.webm', '.wav')
         
-        # Transcribir con speech_recognition
+        # CONVERTIR DE WEBM A WAV USANDO FFMPEG
+        print("🔄 Convirtiendo WebM a WAV con ffmpeg...")
+        
+        comando = [
+            'ffmpeg', '-y',           # -y para sobrescribir sin preguntar
+            '-i', webm_path,          # archivo de entrada
+            '-acodec', 'pcm_s16le',   # codec de audio WAV estándar
+            '-ar', '16000',           # sample rate 16kHz (bueno para voz)
+            '-ac', '1',               # mono (1 canal)
+            wav_path                  # archivo de salida
+        ]
+        
+        resultado = subprocess.run(comando, capture_output=True, text=True)
+        
+        # Eliminar archivo WebM temporal
         try:
-            with sr.AudioFile(archivo_temp.name) as fuente:
+            os.unlink(webm_path)
+        except:
+            pass
+        
+        if resultado.returncode != 0:
+            print(f"❌ Error en ffmpeg: {resultado.stderr}")
+            return jsonify({
+                'exito': False,
+                'error': 'Error al convertir audio. ¿Está instalado ffmpeg?',
+                'texto': ''
+            })
+        
+        print(f"✅ Conversión exitosa: {wav_path}")
+        
+        # Transcribir el WAV con speech_recognition
+        try:
+            with sr.AudioFile(wav_path) as fuente:
                 audio = reconocedor.record(fuente)
                 texto = reconocedor.recognize_google(audio, language="es-MX")
                 print(f"✅ Transcrito: {texto}")
+                
+                # Limpiar archivo WAV
+                try:
+                    os.unlink(wav_path)
+                except:
+                    pass
+                
+                return jsonify({
+                    'exito': True,
+                    'texto': texto
+                })
+                
         except sr.UnknownValueError:
             print("❓ No se pudo entender el audio")
-            return jsonify({
-                'exito': False,
-                'error': 'No se pudo entender el audio',
-                'texto': ''
-            })
-        except Exception as e:
-            print(f"❌ Error al transcribir: {e}")
-            # Intentar convertir el formato si falla
-            return jsonify({
-                'exito': False,
-                'error': f'Error al procesar audio: {str(e)}',
-                'texto': ''
-            })
-        finally:
-            # Limpiar archivo temporal
             try:
-                os.unlink(archivo_temp.name)
+                os.unlink(wav_path)
             except:
                 pass
-        
-        return jsonify({
-            'exito': True,
-            'texto': texto
-        })
+            return jsonify({
+                'exito': False,
+                'error': 'No se pudo entender el audio. Intenta hablar más claro.',
+                'texto': ''
+            })
+        except sr.RequestError as e:
+            print(f"🌐 Error del servicio: {e}")
+            try:
+                os.unlink(wav_path)
+            except:
+                pass
+            return jsonify({
+                'exito': False,
+                'error': f'Error del servicio de reconocimiento: {e}',
+                'texto': ''
+            })
         
     except Exception as e:
         print(f"❌ Error general: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e), 'exito': False}), 500
 
 
@@ -315,6 +360,22 @@ if __name__ == '__main__':
     print("🎙️  SERVIDOR DE VOZ - HABLACONMIGO")
     print("   Universidad Veracruzana - Interfaces de Usuario Avanzadas")
     print("=" * 60)
+    print()
+    
+    # Verificar que ffmpeg esté instalado
+    try:
+        resultado = subprocess.run(['ffmpeg', '-version'], capture_output=True, timeout=5)
+        if resultado.returncode == 0:
+            print("✅ ffmpeg está instalado correctamente")
+        else:
+            print("⚠️  ffmpeg encontrado pero con errores")
+    except FileNotFoundError:
+        print("❌ ffmpeg NO está instalado")
+        print("   El reconocimiento de voz NO funcionará sin ffmpeg.")
+        print("   Instálalo con: winget install ffmpeg")
+    except Exception as e:
+        print(f"⚠️  Error verificando ffmpeg: {e}")
+    
     print()
     print("📚 Librerías utilizadas (vistas en clase):")
     print(f"   • speech_recognition v{sr.__version__}")
